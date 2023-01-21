@@ -31,4 +31,9 @@
 *.out
 *.app
 
+**/data
 *.off
+*.png
+
+**/cmake-build-debug
+**/.idea
