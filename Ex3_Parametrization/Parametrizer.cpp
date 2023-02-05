@@ -5,6 +5,8 @@
 //=============================================================================
 
 #include <iostream>
+#include <math.h>
+#include <assert.h>
 
 #include "Parametrizer.h"
 
@@ -13,6 +15,9 @@ m_mesh(iMesh)
 {
   OpenMesh::VProp<OpenMesh::Vec2f>(m_mesh, "vparam_u");
   OpenMesh::VProp<OpenMesh::Vec2f>(m_mesh, "vparam_h");
+
+  OpenMesh::VProp<OpenMesh::Scalar>(m_mesh, "theta");
+  this->set_boundary();
 }
 
 void Parametrizer::solve_linear_system(gmm::dense_matrix<float> & iA, std::vector<float>& iB, std::vector<float> & oX)
@@ -24,6 +29,40 @@ void Parametrizer::solve_linear_system(gmm::dense_matrix<float> & iA, std::vecto
   gmm::lu_solve(iA, oX, iB);
 }
 
+// TODO: Add to header
+void Parametrizer::set_boundary() {
+  OpenMesh::Scalar total_length = 0;
+  for (const auto& e : m_mesh.edges()) { 
+    if (e.is_boundary()) {
+      total_length += m_mesh.calc_edge_sqr_length(e);
+    }
+  }
+
+  OpenMesh::SmartVertexHandle start;
+  for (const auto& he : m_mesh.halfedges()) {
+    if (m_mesh.is_boundary(he)) {
+      start = he.from();
+      break;
+    }
+  }
+
+  auto vertex_theta = OpenMesh::VProp<OpenMesh::Scalar>(m_mesh, "theta");
+  vertex_theta[start.from()] = 0;
+
+  float total_theta = 0;
+
+  auto boundaryhe = start;
+  while (boundaryhe.to() != start.from()) { // TODO: Check if this is iterating through the boundary in a continous way
+    auto length = m_mesh.calc_edge_sqr_length(boundaryhe);
+    auto theta = length * (2 * M_PI / total_length);
+
+    total_theta += theta;
+    vertex_theta[boundaryhe.to()] = total_theta;
+
+    boundaryhe = m_mesh.next_halfedge_handle(boundaryhe);
+  } 
+}
+
 void Parametrizer::calc_uniform_parameterization()
 {
   // ------------- IMPLEMENT HERE ---------
@@ -33,7 +72,47 @@ void Parametrizer::calc_uniform_parameterization()
   // Solve the linear system for internal vertex parameters using solve_linear_system()
   // Store the parameters in the vparam_u vertex property
   // ------------- IMPLEMENT HERE ---------
+
+  auto vparam_u = OpenMesh::VProp<OpenMesh::Vec2f>(m_mesh, "vparam_u");
+  auto index = OpenMesh::VProp<MyMesh::Scalar>(m_mesh, "index");
+  auto boundary_theta = OpenMesh::VProp<OpenMesh::Scalar>(m_mesh, "theta");
   
+  gmm::dense_matrix<float> W(m_mesh.n_vertices(), m_mesh.n_vertices());
+  gmm::clear(W);
+
+  std::vector<float> bx(m_mesh.n_vertices(), 0);
+  std::vector<float> by(m_mesh.n_vertices(), 0);
+
+  for (const auto& vi : m_mesh.vertices()) {
+    if (m_mesh.is_boundary(vi)) {
+      assert(0 <= vi.idx && vi.idx < m_mesh.n_vertices());
+      W(vi.idx(), vi.idx()) = 1.0f;
+
+      bx[vi.idx] = cos(boundary_theta[vi]);
+      by[vi.idx] = sin(boundary_theta[vi]);
+    }
+    else {
+      W(cur_idx, cur_idx) = -m_mesh.valence(vi);
+    }
+  }
+
+  for (const auto& ei : m_mesh.edges()) {
+    auto v0 = ei.v0();
+    auto v1 = ei.v1();
+    W(index[v0], index[v1]) = 1.0f;
+    W(index[v1], index[v0]) = 1.0f;
+  }
+
+  std::vector<float> x(m_mesh.n_vertices());
+  std::vector<float> y(m_mesh.n_vertices());
+
+  this->solve_linear_system(W, bx, x);
+  this->solve_linear_system(W, by, y);
+
+  for (const auto& vi : m_mesh.vertices()) {
+    vparam_u[vi][0] = x[vi.idx];
+    vparam_u[vi][1] = y[vi.idx];
+  }
 }
 
 void Parametrizer::calc_harmonic_parameterization()

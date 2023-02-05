@@ -37,6 +37,7 @@
 
 **/cmake-build-debug
 **/.idea
+**/.vscode
 
 **/gmm
 **/OpenMesh
