@@ -3,7 +3,7 @@
 
 #include <OpenMesh/Core/Utils/PropertyManager.hh>
 #include <OpenMesh/Core/Mesh/TriMesh_ArrayKernelT.hh>
-#include <OpenMesh/Mesh/PolyMeshT.hh>
+#include <OpenMesh/Core/Mesh/PolyMeshT.hh>
 
 #include <gmm/gmm.h>
 
@@ -40,7 +40,9 @@ private:
   // solve linear system A * x = b
   void solve_linear_system(gmm::dense_matrix<float> & iA, std::vector<float>& iB, std::vector<float> & oX);
 
-  void set_boundary();
+  void set_boundary(std::vector<OpenMesh::VertexHandle> boundaries, float total_length);
+
+  float list_boundary(std::vector<OpenMesh::VertexHandle> & oBoundary);
   
 private:
   MyMesh &  m_mesh;
