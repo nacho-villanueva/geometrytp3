@@ -229,7 +229,35 @@ void Parametrizer::computeTextureCoordinates(int iTextureWidth, int iTextureHeig
   // If imode is equals to Harmonic, compute the texture coordinates using the
   // parameters stored in vparam_h.
   // ------------- IMPLEMENT HERE ---------
-  
+  auto vparam_u = OpenMesh::VProp<OpenMesh::Vec2f>(m_mesh, "vparam_u");
+  auto vparam_h = OpenMesh::VProp<OpenMesh::Vec2f>(m_mesh, "vparam_h");
+  auto vparam = imode == Uniform ? vparam_u : vparam_h;
+
+  float min_u = std::numeric_limits<float>::infinity();
+  float min_v = std::numeric_limits<float>::infinity();
+  float max_u = -std::numeric_limits<float>::infinity();
+  float max_v = -std::numeric_limits<float>::infinity();
+  for (const auto& vh : m_mesh.vertices()) {
+    float u = vparam[vh][0];
+    float v = vparam[vh][1];
+    min_u = std::min(u, min_u);
+    min_v = std::min(v, min_v);
+    max_u = std::max(u, max_u);
+    max_v = std::max(v, max_v);
+  }
+
+  float range_u = max_u - min_u;
+  float range_v = max_v - min_v;
+  for (const auto& vh : m_mesh.vertices()) {
+    OpenMesh::Vec2f scale;
+    scale[0] = (1.f / range_u) * iRepeats;
+    scale[1] = (1.f / range_v) * iRepeats;
+    OpenMesh::Vec2f shift;
+    shift[0] = -min_u;
+    shift[1] = -min_v;
+    auto texcoord = (vparam[vh] + shift) * scale;
+    m_mesh.set_texcoord2D(vh, texcoord); 
+  }
 }
 
 float angle3D(OpenMesh::Vec3f v1, OpenMesh::Vec3f v2) {
