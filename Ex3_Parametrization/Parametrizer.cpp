@@ -46,7 +46,6 @@ void Parametrizer::set_boundary(std::vector<OpenMesh::VertexHandle> boundaries, 
     auto length = (m_mesh.point(lastVertex) - m_mesh.point(*it)).length();
     auto theta = length * ( (2 * M_PI) / total_length);
     tl2 += length;
-    // std::cout << "(" << lastVertex.idx() << ", " << it->idx() << ") Length: " << length << " - Theta: " << theta << " - Total Theta: " << total_theta << std::endl;
     total_theta += theta; 
     vertex_theta[*it] = total_theta;
     lastVertex = *it;
@@ -54,7 +53,6 @@ void Parametrizer::set_boundary(std::vector<OpenMesh::VertexHandle> boundaries, 
 
   auto last_length = (m_mesh.point(boundaries.front()) - m_mesh.point(boundaries.back())).length();
   auto theta = last_length * ( (2 * M_PI) / total_length);
-  // std::cout << "(" << boundaries.back().idx() << ", " << boundaries.front().idx() << ") Length: " << last_length << " Total Theta: " << total_theta << std::endl;
 }
 
 float Parametrizer::list_boundary(std::vector<OpenMesh::VertexHandle> & oBoundary) {
@@ -69,11 +67,9 @@ float Parametrizer::list_boundary(std::vector<OpenMesh::VertexHandle> & oBoundar
     if(m_mesh.is_boundary(*v_iter)) {
       oBoundary.push_back(*v_iter);
       currentVertex = *v_iter;
-      // std::cout << "Found first boundary vertex: "<< v_iter -> idx() <<"\n";
       break;
     }
   }
-
 
   bool finished = false;
   MyMesh::VertexVertexIter vv_iter;
@@ -81,7 +77,6 @@ float Parametrizer::list_boundary(std::vector<OpenMesh::VertexHandle> & oBoundar
     finished = true;
     for(vv_iter = m_mesh.vv_iter(currentVertex); vv_iter.is_valid(); ++vv_iter) {
       if(m_mesh.is_boundary(*vv_iter)) {
-        // std::cout << "Adding vertex to boundary. Id:" << (*vv_iter).idx() << "\n";
         if(std::find(oBoundary.begin(), oBoundary.end(), *vv_iter) == oBoundary.end()) {
           currentVertex = *vv_iter;
           total_length += (m_mesh.point(currentVertex) - m_mesh.point(oBoundary.back())).length();
@@ -93,57 +88,49 @@ float Parametrizer::list_boundary(std::vector<OpenMesh::VertexHandle> & oBoundar
     }
   }
 
-  // std::cout << "Total boundary length: " << total_length << std::endl; 
   return total_length;
 }
 
-// float Parametrizer::list_boundary(std::vector<OpenMesh::VertexHandle> & oBoundary) {
-//   int nb_v = m_mesh.n_vertices();
-//   bool found = true;
-//   float total_length = 0;
+float get_uniform_weight(OpenMesh::SmartEdgeHandle ei, MyMesh& m_mesh) {
+  return 1.0f;
+}
+
+float get_harmonic_weight(OpenMesh::SmartEdgeHandle ei, MyMesh& m_mesh) {
+  auto v0 = ei.v0();
+  auto v1 = ei.v1();
+  auto p0 = m_mesh.point(v0);
+  auto p1 = m_mesh.point(v1);
+  auto he0 = ei.h0();
+  auto he1 = ei.h1();
   
-//   MyMesh::VertexIter v_it;
-//   MyMesh::VertexVertexIter vv_it;
+  auto he_alpha = he0.next();
+  auto he_beta = he1.next();
+  auto v_alpha = he_alpha.to();
+  auto v_beta = he_beta.to();
+  auto p_alpha = m_mesh.point(v_alpha);
+  auto p_beta = m_mesh.point(v_beta);
 
-//   for(v_it = m_mesh.vertices().begin(); v_it != m_mesh.vertices_end(); ++v_it) {
-//     if(m_mesh.is_boundary(*v_it)){
-//       oBoundary.push_back(*v_it);
-//       break;
-//     }
-//   }
+  auto alpha_vec1 = p0 - p_alpha; 
+  auto alpha_vec2 = p1 - p_alpha; 
+  auto beta_vec1 = p0 - p_beta; 
+  auto beta_vec2 = p1 - p_beta; 
+  alpha_vec1 = alpha_vec1 / alpha_vec1.length();
+  alpha_vec2 = alpha_vec2 / alpha_vec2.length();
+  beta_vec1 = beta_vec1 / beta_vec1.length();
+  beta_vec2 = beta_vec2 / beta_vec2.length();
 
-//   while (found){
-//     found = false;
-//     for (vv_it = m_mesh.vv_iter(oBoundary.back()); vv_it.is_valid(); ++v_it){
-//       if ((m_mesh.is_boundary(*vv_it)) && (std::find(oBoundary.begin(), oBoundary.end(), *vv_it) == oBoundary.end())){
-//         float length = (m_mesh.point(*vv_it) - m_mesh.point(oBoundary.back())).length();
-//         total_length += length;
-//         oBoundary.push_back(*vv_it);
-//         found = true;
-//         break;
-//       }
-//     }
-//   }
+  auto cos_alpha = alpha_vec1.dot(alpha_vec2);
+  auto cos_beta = beta_vec1.dot(beta_vec2);
+  auto sin_alpha = alpha_vec1.cross(alpha_vec2).length();
+  auto sin_beta = beta_vec1.cross(beta_vec2).length();
+  auto cot_alpha = cos_alpha / sin_alpha;
+  auto cot_beta = cos_beta / sin_beta;
+  return (cot_alpha + cot_beta) / 2;
+}
 
-//   return total_length;
-// }
-
-
-
-
-
-void Parametrizer::calc_uniform_parameterization()
+std::tuple<std::vector<float>, std::vector<float>>
+Parametrizer::calc_parameterization(weight_fn w) 
 {
-  // ------------- IMPLEMENT HERE ---------
-  // TASK 3.1 Uniform map computation:
-  // Search and order boundary vertices
-  // Compute boundary parameters
-  // Solve the linear system for internal vertex parameters using solve_linear_system()
-  // Store the parameters in the vparam_u vertex property
-  // ------------- IMPLEMENT HERE ---------
-
-  auto vparam_u = OpenMesh::VProp<OpenMesh::Vec2f>(m_mesh, "vparam_u");
-  auto index = OpenMesh::VProp<MyMesh::Scalar>(m_mesh, "index");
   auto boundary_theta = OpenMesh::VProp<MyMesh::Scalar>(m_mesh, "theta");
   
   gmm::dense_matrix<float> W(m_mesh.n_vertices(), m_mesh.n_vertices());
@@ -153,10 +140,18 @@ void Parametrizer::calc_uniform_parameterization()
   std::vector<float> by(m_mesh.n_vertices(), 0);
   
   for (const auto& ei : m_mesh.edges()) {
+    if (ei.is_boundary()) {
+      continue;
+    }
     auto v0 = ei.v0();
     auto v1 = ei.v1();
-    W(v0.idx(), v1.idx()) = 1.0f;
-    W(v1.idx(), v0.idx()) = 1.0f;
+    auto weight = w(ei, m_mesh);
+    if (!v0.is_boundary()) {
+      W(v0.idx(), v1.idx()) = weight;
+    }
+    if (!v1.is_boundary()) {
+      W(v1.idx(), v0.idx()) = weight;
+    }
   }
 
   for (const auto& vi : m_mesh.vertices()) {
@@ -168,30 +163,13 @@ void Parametrizer::calc_uniform_parameterization()
       by[vi.idx()] = sin(boundary_theta[vi]);
     }
     else {
-      // std::cout << "Valence of " << vi.idx() << ": " << -m_mesh.valence(vi) << std::endl;
-      // int valence = 0;
       for (const auto& vj : m_mesh.vertices()) {
         if (vi.idx() != vj.idx()) {
           W(vi.idx(), vi.idx()) -= W(vi.idx(), vj.idx());
         }
       }
-      // for (const auto& eh : vi.edges()) valence++;
-      // W(vi.idx(), vi.idx()) = -valence;
-      // -m_mesh.valence(vi)
     }
   }
-
-
-  //for(int j = 0; j < m_mesh.n_vertices(); j++) {
-  //  for(int i = 0; i < m_mesh.n_vertices(); i++){ 
-  //    std::cout << W(i, j) << " ";
-  //  }
-  //  std::cout << "\n";
-  //}
-
-  // for(int j = 0; j < m_mesh.n_vertices(); j++) {
-    //std::cout << "(" << bx[j] << ", " << by[j] << ")\n"; 
-  // }
 
   std::vector<float> x(m_mesh.n_vertices());
   std::vector<float> y(m_mesh.n_vertices());
@@ -199,16 +177,26 @@ void Parametrizer::calc_uniform_parameterization()
   this->solve_linear_system(W, bx, x);
   this->solve_linear_system(W, by, y);
 
+  return std::make_tuple(x, y);
+}
+
+void Parametrizer::calc_uniform_parameterization()
+{
+  // ------------- IMPLEMENT HERE ---------
+  // TASK 3.1 Uniform map computation:
+  // Search and order boundary vertices
+  // Compute boundary parameters
+  // Solve the linear system for internal vertex parameters using solve_linear_system()
+  // Store the parameters in the vparam_u vertex property
+  // ------------- IMPLEMENT HERE ---------
+  auto vparam_u = OpenMesh::VProp<OpenMesh::Vec2f>(m_mesh, "vparam_u");
+  auto xy = calc_parameterization(get_uniform_weight);
+  auto x = std::get<0>(xy);
+  auto y = std::get<1>(xy);
   for (const auto& vi : m_mesh.vertices()) {
-    // std::cout << "vi: " << vi.idx() << " (" << x[vi.idx()] << ", " << y[vi.idx()] << ")\n"; 
     vparam_u[vi][0] = x[vi.idx()];
     vparam_u[vi][1] = y[vi.idx()];
   }
-}
-
-//TODO: delete
-std::string point_to_str (OpenMesh::DefaultTraits::Point p) {
-  return "(" + std::to_string(p[0]) + ", " + std::to_string(p[1]) + ", " + std::to_string(p[2]) + ")";
 }
 
 void Parametrizer::calc_harmonic_parameterization()
@@ -220,104 +208,14 @@ void Parametrizer::calc_harmonic_parameterization()
   // Solve the linear system for internal vertex parameters using solve_linear_system()
   // Store the parameters in the vparam_h vertex property
   // ------------- IMPLEMENT HERE ---------
-
   auto vparam_h = OpenMesh::VProp<OpenMesh::Vec2f>(m_mesh, "vparam_h");
-  auto index = OpenMesh::VProp<MyMesh::Scalar>(m_mesh, "index");
-  auto boundary_theta = OpenMesh::VProp<MyMesh::Scalar>(m_mesh, "theta");
-  
-  gmm::dense_matrix<float> W(m_mesh.n_vertices(), m_mesh.n_vertices());
-  gmm::clear(W);
-
-  std::vector<float> bx(m_mesh.n_vertices(), 0);
-  std::vector<float> by(m_mesh.n_vertices(), 0);
-  
-  for (const auto& ei : m_mesh.edges()) {
-    auto v0 = ei.v0();
-    auto v1 = ei.v1();
-    auto p0 = m_mesh.point(v0);
-    auto p1 = m_mesh.point(v1);
-    auto he0 = ei.h0();
-    auto he1 = ei.h1();
-    
-    auto he_alpha = he0.next();
-    auto he_beta = he1.next();
-    auto v_alpha = he_alpha.to();
-    auto v_beta = he_beta.to();
-    auto p_alpha = m_mesh.point(v_alpha);
-    auto p_beta = m_mesh.point(v_beta);
-
-    // std::cout << "v0: " << point_to_str(p0) 
-    //   << " v1: " << point_to_str(p1) 
-    //   << " v_alpha: " << point_to_str(p_alpha) 
-    //   << " v_beta: " << point_to_str(p_beta) << "\n";
-
-    auto alpha_vec1 = p0 - p_alpha; 
-    auto alpha_vec2 = p1 - p_alpha; 
-    auto beta_vec1 = p0 - p_beta; 
-    auto beta_vec2 = p1 - p_beta; 
-    alpha_vec1 = alpha_vec1 / alpha_vec1.length();
-    alpha_vec2 = alpha_vec2 / alpha_vec2.length();
-    beta_vec1 = beta_vec1 / beta_vec1.length();
-    beta_vec2 = beta_vec2 / beta_vec2.length();
-
-    auto cos_alpha = alpha_vec1.dot(alpha_vec2);
-    auto cos_beta = beta_vec1.dot(beta_vec2);
-    auto sin_alpha = alpha_vec1.cross(alpha_vec2).length();
-    auto sin_beta = beta_vec1.cross(beta_vec2).length();
-    auto cot_alpha = cos_alpha / sin_alpha;
-    auto cot_beta = cos_beta / sin_beta;
-    auto wij = (cot_alpha + cot_beta) / 2;
-
-    W(v0.idx(), v1.idx()) = wij;
-    W(v1.idx(), v0.idx()) = wij;
-  }
-
+  auto xy = calc_parameterization(&get_harmonic_weight);
+  auto x = std::get<0>(xy);
+  auto y = std::get<1>(xy);
   for (const auto& vi : m_mesh.vertices()) {
-    if (m_mesh.is_boundary(vi)) {
-      assert(0 <= (size_t)vi.idx() && (size_t)vi.idx() < m_mesh.n_vertices());
-      W(vi.idx(), vi.idx()) = 1.0f;
-
-      bx[vi.idx()] = cos(boundary_theta[vi]);
-      by[vi.idx()] = sin(boundary_theta[vi]);
-    }
-    else {
-      // std::cout << "Valence of " << vi.idx() << ": " << -m_mesh.valence(vi) << std::endl;
-      // int valence = 0;
-      for (const auto& vj : m_mesh.vertices()) {
-        if (vi.idx() != vj.idx()) {
-          W(vi.idx(), vi.idx()) -= W(vi.idx(), vj.idx());
-        }
-      }
-      // for (const auto& eh : vi.edges()) valence++;
-      // W(vi.idx(), vi.idx()) = -valence;
-      // -m_mesh.valence(vi)
-    }
-  }
-
-
-  // for(int j = 0; j < m_mesh.n_vertices(); j++) {
-  //  for(int i = 0; i < m_mesh.n_vertices(); i++){ 
-  //    std::cout << W(i, j) << " ";
-  //  }
-  //  std::cout << "\n";
-  // }
-
-  // for(int j = 0; j < m_mesh.n_vertices(); j++) {
-    //std::cout << "(" << bx[j] << ", " << by[j] << ")\n"; 
-  // }
-
-  std::vector<float> x(m_mesh.n_vertices());
-  std::vector<float> y(m_mesh.n_vertices());
-
-  this->solve_linear_system(W, bx, x);
-  this->solve_linear_system(W, by, y);
-
-  for (const auto& vi : m_mesh.vertices()) {
-    // std::cout << "vi: " << vi.idx() << " (" << x[vi.idx()] << ", " << y[vi.idx()] << ")\n"; 
     vparam_h[vi][0] = x[vi.idx()];
     vparam_h[vi][1] = y[vi.idx()];
   }
-
 }
 
 void Parametrizer::computeTextureCoordinates(int iTextureWidth, int iTextureHeight, int iRepeats, ParameterizationMode imode)

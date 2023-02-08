@@ -9,6 +9,7 @@
 
 
 typedef OpenMesh::TriMesh_ArrayKernelT<>  MyMesh;
+typedef float (*weight_fn)(OpenMesh::SmartEdgeHandle ei, MyMesh& m_mesh);
 
 //== CLASS DEFINITION =========================================================
 
@@ -38,20 +39,20 @@ public:
   
 private:
   // solve linear system A * x = b
-  void solve_linear_system(gmm::dense_matrix<float> & iA, std::vector<float>& iB, std::vector<float> & oX);
+  void solve_linear_system
+    (gmm::dense_matrix<float> & iA, std::vector<float>& iB, std::vector<float> & oX);
 
   void set_boundary(std::vector<OpenMesh::VertexHandle> boundaries, float total_length);
 
   float list_boundary(std::vector<OpenMesh::VertexHandle> & oBoundary);
+
+  std::tuple<std::vector<float>, std::vector<float>>calc_parameterization
+    (weight_fn w);
   
 private:
   MyMesh &  m_mesh;
 };
 
-
 //=============================================================================
 #endif // Parametrizer_h defined
 //=============================================================================
-
-
-
